@@ -264,6 +264,18 @@ enum cache_request_status tag_array::access( new_addr_type addr, unsigned time, 
         m_res_fail++;
         shader_cache_access_log(m_core_id, m_type_id, 1); // log cache misses
         break;
+    case SUB_BLOCK_MISS:
+    	m_miss++;
+        shader_cache_access_log(m_core_id, m_type_id, 1); // log cache misses
+        if ( m_config.m_alloc_policy == ON_MISS ) {
+            if( m_lines[idx].m_status == MODIFIED ) {
+                wb = true;
+                evicted = m_lines[idx];
+            }
+            m_lines[idx].allocate( m_config.tag(addr), m_config.block_addr(addr), time, sub_block_id );
+            m_lines[idx].m_footprint.set(sub_block_id);
+        }
+        break;
     default:
         fprintf( stderr, "tag_array::access - Error: Unknown"
             "cache_request_status %d\n", status );
@@ -276,11 +288,10 @@ void tag_array::fill( new_addr_type addr, unsigned time )
 {
     assert( m_config.m_alloc_policy == ON_FILL );
     unsigned idx;
-    unsigned sub_block_id = m_config.get_sub_block_id(addr);
     enum cache_request_status status = probe(addr,idx);
-    assert(status==MISS); // MSHR should have prevented redundant memory request
-    m_lines[idx].allocate( m_config.tag(addr), m_config.block_addr(addr), time, sub_block_id );
-    m_lines[idx].fill(time, sub_block_id);
+    assert(status==MISS || status == SUB_BLOCK_MISS); // MSHR should have prevented redundant memory request
+    m_lines[idx].allocate( m_config.tag(addr), m_config.block_addr(addr), time, m_config.get_sub_block_id(addr));
+    m_lines[idx].fill(time, m_config.get_sub_block_id(addr));
 }
 
 void tag_array::fill( unsigned index, unsigned time )
